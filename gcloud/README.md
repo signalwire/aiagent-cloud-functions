@@ -47,9 +47,6 @@ gcloud config list
 ## Quick Start
 
 ```bash
-# Make deploy script executable
-chmod +x deploy.sh
-
 # Deploy with defaults (function: signalwire-hello-world, region: us-central1)
 ./deploy.sh
 

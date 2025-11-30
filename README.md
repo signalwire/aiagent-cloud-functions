@@ -82,7 +82,6 @@ az login
 
 ```bash
 cd aws
-chmod +x deploy.sh
 ./deploy.sh
 ```
 
@@ -90,7 +89,6 @@ chmod +x deploy.sh
 
 ```bash
 cd gcloud
-chmod +x deploy.sh
 ./deploy.sh
 ```
 
@@ -98,7 +96,6 @@ chmod +x deploy.sh
 
 ```bash
 cd azure
-chmod +x deploy.sh
 ./deploy.sh
 ```
 

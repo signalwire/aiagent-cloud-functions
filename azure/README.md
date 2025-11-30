@@ -41,9 +41,6 @@ az login
 ## Quick Start
 
 ```bash
-# Make deploy script executable
-chmod +x deploy.sh
-
 # Deploy with defaults (app: signalwire-hello-world, region: eastus)
 ./deploy.sh
 

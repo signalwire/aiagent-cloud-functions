@@ -45,9 +45,6 @@ Enter your:
 ## Quick Start
 
 ```bash
-# Make deploy script executable
-chmod +x deploy.sh
-
 # Deploy with defaults (function: signalwire-hello-world, region: us-east-1)
 ./deploy.sh
 
