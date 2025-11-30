@@ -21,9 +21,9 @@ MEMORY_SIZE=512
 TIMEOUT=30
 ROLE_NAME="${FUNCTION_NAME}-role"
 
-# Default credentials (change these or set via environment)
-AUTH_USER="${SWML_BASIC_AUTH_USER:-admin}"
-AUTH_PASS="${SWML_BASIC_AUTH_PASSWORD:-$(openssl rand -base64 12)}"
+# Credentials (set via environment or auto-generate)
+SWML_BASIC_AUTH_USER="${SWML_BASIC_AUTH_USER:-admin}"
+SWML_BASIC_AUTH_PASSWORD="${SWML_BASIC_AUTH_PASSWORD:-$(openssl rand -base64 12)}"
 
 echo "=== SignalWire Hello World - AWS Lambda Deployment ==="
 echo "Function: $FUNCTION_NAME"
@@ -136,7 +136,7 @@ else
         --timeout "$TIMEOUT" \
         --region "$REGION" \
         --cli-read-timeout 300 \
-        --environment "Variables={SWML_BASIC_AUTH_USER=$AUTH_USER,SWML_BASIC_AUTH_PASSWORD=$AUTH_PASS}" \
+        --environment "Variables={SWML_BASIC_AUTH_USER=$SWML_BASIC_AUTH_USER,SWML_BASIC_AUTH_PASSWORD=$SWML_BASIC_AUTH_PASSWORD}" \
         --output text --query 'FunctionArn'
 fi
 
@@ -269,17 +269,17 @@ echo ""
 echo "Endpoint URL: $ENDPOINT"
 echo ""
 echo "Authentication:"
-echo "  Username: $AUTH_USER"
-echo "  Password: $AUTH_PASS"
+echo "  Username: $SWML_BASIC_AUTH_USER"
+echo "  Password: $SWML_BASIC_AUTH_PASSWORD"
 echo ""
 echo "Test SWML output:"
-echo "  curl -u $AUTH_USER:$AUTH_PASS $ENDPOINT/"
+echo "  curl -u $SWML_BASIC_AUTH_USER:$SWML_BASIC_AUTH_PASSWORD $ENDPOINT/"
 echo ""
 echo "Test SWAIG function:"
-echo "  curl -u $AUTH_USER:$AUTH_PASS -X POST $ENDPOINT/swaig \\"
+echo "  curl -u $SWML_BASIC_AUTH_USER:$SWML_BASIC_AUTH_PASSWORD -X POST $ENDPOINT/swaig \\"
 echo "    -H 'Content-Type: application/json' \\"
 echo "    -d '{\"function\": \"say_hello\", \"argument\": {\"parsed\": [{\"name\": \"Alice\"}]}}'"
 echo ""
 echo "Configure SignalWire:"
-echo "  Set your phone number's SWML URL to: https://$AUTH_USER:$AUTH_PASS@${API_ID}.execute-api.${REGION}.amazonaws.com/"
+echo "  Set your phone number's SWML URL to: https://$SWML_BASIC_AUTH_USER:$SWML_BASIC_AUTH_PASSWORD@${API_ID}.execute-api.${REGION}.amazonaws.com/"
 echo ""
