@@ -60,15 +60,17 @@ class HelloWorldAgent(AgentBase):
 
         @self.tool(description="Get Google Cloud deployment information")
         def get_platform_info(args, raw_data):
-            function_name = os.getenv("K_SERVICE", os.getenv("FUNCTION_NAME", "unknown"))
-            region = os.getenv("FUNCTION_REGION", "unknown")
-            project = os.getenv("GOOGLE_CLOUD_PROJECT", os.getenv("GCP_PROJECT", "unknown"))
-            memory = os.getenv("FUNCTION_MEMORY_MB", "unknown")
+            # Gen 2 Cloud Functions run on Cloud Run with these env vars
+            service = os.getenv("K_SERVICE", "unknown")
+            revision = os.getenv("K_REVISION", "unknown")
+            project = os.getenv("GOOGLE_CLOUD_PROJECT", os.getenv("GCLOUD_PROJECT", "unknown"))
+            # Cloud Run sets memory limit in K8s format
+            memory_limit = os.getenv("MEMORY_LIMIT", "unknown")
 
             return SwaigFunctionResult(
-                f"Running on Google Cloud Functions. "
-                f"Function: {function_name}, Project: {project}, "
-                f"Region: {region}, Memory: {memory}MB."
+                f"Running on Google Cloud Functions Gen 2. "
+                f"Service: {service}, Revision: {revision}, "
+                f"Project: {project}, Memory: {memory_limit}."
             )
 
         @self.tool(
