@@ -3,7 +3,7 @@
 #
 # Prerequisites:
 #   - Azure CLI installed and authenticated (az login)
-#   - Python 3.11+
+#   - Docker installed and running (for building correct architecture)
 #
 # Usage:
 #   ./deploy.sh                              # Deploy with defaults
@@ -21,8 +21,14 @@ RUNTIME="python"
 RUNTIME_VERSION="3.11"
 FUNCTIONS_VERSION="4"
 
+# Default credentials (change these or set via environment)
+AUTH_USER="${SWML_BASIC_AUTH_USER:-admin}"
+AUTH_PASS="${SWML_BASIC_AUTH_PASSWORD:-$(openssl rand -base64 12)}"
+
 # Truncate storage account name to 24 chars (Azure limit)
 STORAGE_ACCOUNT="${STORAGE_ACCOUNT:0:24}"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "=== SignalWire Hello World - Azure Functions Deployment ==="
 echo "App Name: $APP_NAME"
@@ -30,6 +36,18 @@ echo "Location: $LOCATION"
 echo "Resource Group: $RESOURCE_GROUP"
 echo "Storage Account: $STORAGE_ACCOUNT"
 echo ""
+
+# Check for Docker
+if ! command -v docker &> /dev/null; then
+    echo "ERROR: Docker is required but not installed."
+    echo "Please install Docker: https://docs.docker.com/get-docker/"
+    exit 1
+fi
+
+if ! docker info &> /dev/null; then
+    echo "ERROR: Docker is not running. Please start Docker."
+    exit 1
+fi
 
 # Step 1: Login check
 echo "Step 1: Checking Azure login..."
@@ -65,6 +83,8 @@ if ! az storage account show --name "$STORAGE_ACCOUNT" --resource-group "$RESOUR
         --sku Standard_LRS \
         --output none
     echo "Created storage account: $STORAGE_ACCOUNT"
+    echo "Waiting for storage account to propagate..."
+    sleep 10
 else
     echo "Storage account exists: $STORAGE_ACCOUNT"
 fi
@@ -92,24 +112,41 @@ else
     echo "Function App exists: $APP_NAME"
 fi
 
-# Step 5: Deploy the function
+# Step 5: Build and deploy the function using Docker
 echo ""
-echo "Step 5: Deploying function code..."
+echo "Step 5: Building function with Docker (linux/amd64)..."
 
-# Create a temporary directory for deployment
 DEPLOY_DIR=$(mktemp -d)
-cp -r function_app "$DEPLOY_DIR/"
-cp host.json "$DEPLOY_DIR/"
-cp requirements.txt "$DEPLOY_DIR/"
-cp local.settings.json "$DEPLOY_DIR/" 2>/dev/null || true
+
+# Copy function files
+cp -r "$SCRIPT_DIR/function_app" "$DEPLOY_DIR/"
+cp "$SCRIPT_DIR/host.json" "$DEPLOY_DIR/"
+cp "$SCRIPT_DIR/requirements.txt" "$DEPLOY_DIR/"
+cp "$SCRIPT_DIR/local.settings.json" "$DEPLOY_DIR/" 2>/dev/null || true
+
+# Build dependencies using Docker for correct architecture
+echo "Installing dependencies via Docker..."
+docker run --rm \
+    --platform linux/amd64 \
+    --entrypoint "" \
+    -v "$DEPLOY_DIR:/var/task" \
+    -w /var/task \
+    mcr.microsoft.com/azure-functions/python:4-python3.11 \
+    bash -c "pip install -r requirements.txt -t .python_packages/lib/site-packages --quiet"
 
 # Create zip for deployment
+echo "Creating deployment package..."
 ZIP_FILE="$DEPLOY_DIR/deploy.zip"
 cd "$DEPLOY_DIR"
-zip -r "$ZIP_FILE" . -q
+zip -r "$ZIP_FILE" . -x "*.pyc" -q
 cd - > /dev/null
 
+PACKAGE_SIZE=$(du -h "$ZIP_FILE" | cut -f1)
+echo "Package size: $PACKAGE_SIZE"
+
 # Deploy using zip deployment
+echo ""
+echo "Step 6: Deploying to Azure..."
 az functionapp deployment source config-zip \
     --name "$APP_NAME" \
     --resource-group "$RESOURCE_GROUP" \
@@ -121,9 +158,20 @@ echo "Deployment complete"
 # Cleanup
 rm -rf "$DEPLOY_DIR"
 
-# Step 6: Get the endpoint URL
+# Step 7: Set environment variables
 echo ""
-echo "Step 6: Getting endpoint URL..."
+echo "Step 7: Configuring environment variables..."
+az functionapp config appsettings set \
+    --name "$APP_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --settings \
+        SWML_BASIC_AUTH_USER="$AUTH_USER" \
+        SWML_BASIC_AUTH_PASSWORD="$AUTH_PASS" \
+    --output none
+
+# Step 8: Get the endpoint URL
+echo ""
+echo "Step 8: Getting endpoint URL..."
 
 ENDPOINT="https://${APP_NAME}.azurewebsites.net"
 
@@ -134,24 +182,20 @@ sleep 10
 echo ""
 echo "=== Deployment Complete ==="
 echo ""
-echo "Endpoint URL: $ENDPOINT"
+echo "Endpoint URL: $ENDPOINT/api/function_app"
+echo ""
+echo "Authentication:"
+echo "  Username: $AUTH_USER"
+echo "  Password: $AUTH_PASS"
 echo ""
 echo "Test SWML output:"
-echo "  curl $ENDPOINT/api/function_app"
+echo "  curl -u $AUTH_USER:$AUTH_PASS $ENDPOINT/api/function_app"
 echo ""
 echo "Test SWAIG function:"
-echo "  curl -X POST $ENDPOINT/api/function_app/swaig \\"
+echo "  curl -u $AUTH_USER:$AUTH_PASS -X POST $ENDPOINT/api/function_app/swaig \\"
 echo "    -H 'Content-Type: application/json' \\"
 echo "    -d '{\"function\": \"say_hello\", \"argument\": {\"parsed\": [{\"name\": \"Alice\"}]}}'"
 echo ""
 echo "Configure SignalWire:"
-echo "  Set your phone number's SWML URL to: $ENDPOINT/api/function_app"
-echo ""
-
-# Step 7: Optional environment variables
-echo "To set environment variables (optional):"
-echo "  az functionapp config appsettings set \\"
-echo "    --name $APP_NAME \\"
-echo "    --resource-group $RESOURCE_GROUP \\"
-echo "    --settings SWML_BASIC_AUTH_USER=myuser SWML_BASIC_AUTH_PASSWORD=mypass"
+echo "  Set your phone number's SWML URL to: https://$AUTH_USER:$AUTH_PASS@${APP_NAME}.azurewebsites.net/api/function_app"
 echo ""
