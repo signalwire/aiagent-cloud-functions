@@ -141,7 +141,7 @@ After deployment, configure your SignalWire phone number:
 │   Platform   │      │  HTTP Trigger   │      │  (Your Agent)    │
 └──────────────┘      └─────────────────┘      └──────────────────┘
        │                      │                        │
-       │   GET /              │                        │
+       │   POST /             │                        │
        │─────────────────────>│───────────────────────>│
        │                      │     Returns SWML       │
        │<─────────────────────│<───────────────────────│
