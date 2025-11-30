@@ -4,9 +4,35 @@ Deploy a SignalWire Hello World agent to AWS Lambda with API Gateway.
 
 ## Prerequisites
 
-- AWS CLI installed and configured (`aws configure`)
+- AWS CLI installed and configured
 - Docker installed and running
 - AWS account with appropriate permissions
+
+### Install AWS CLI
+
+```bash
+# macOS
+brew install awscli
+
+# Linux
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip && sudo ./aws/install
+
+# Windows
+msiexec.exe /i https://awscli.amazonaws.com/AWSCLIV2.msi
+```
+
+### Configure AWS CLI
+
+```bash
+aws configure
+```
+
+Enter your:
+- AWS Access Key ID
+- AWS Secret Access Key
+- Default region (e.g., `us-east-1`)
+- Default output format (e.g., `json`)
 
 ## Files
 
@@ -36,24 +62,98 @@ SWML_BASIC_AUTH_USER=myuser SWML_BASIC_AUTH_PASSWORD=mypass ./deploy.sh
 
 1. **Creates IAM Role** - Lambda execution role with basic permissions
 2. **Packages Function** - Uses Docker to build dependencies for Lambda's linux/amd64 architecture
-3. **Deploys Lambda** - Creates or updates the Lambda function with authentication configured
+3. **Deploys Lambda** - Creates or updates the Lambda function
 4. **Creates API Gateway** - HTTP API for public endpoint
-5. **Configures Routes** - Routes for SWML (/) and SWAIG (/swaig)
+5. **Configures Routes** - Routes for SWML (/) and SWAIG (/swaig, /{proxy+})
 6. **Sets Permissions** - Allows API Gateway to invoke Lambda
 
-## Authentication
+## Required IAM Permissions
 
-The SignalWire agent requires HTTP Basic Authentication. Credentials are configured via environment variables:
+The user running the deploy script needs the following permissions:
+
+### Minimum Required Policy
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "LambdaPermissions",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:CreateFunction",
+        "lambda:UpdateFunctionCode",
+        "lambda:UpdateFunctionConfiguration",
+        "lambda:GetFunction",
+        "lambda:DeleteFunction",
+        "lambda:AddPermission",
+        "lambda:RemovePermission",
+        "lambda:InvokeFunction",
+        "lambda:GetFunctionConfiguration"
+      ],
+      "Resource": "arn:aws:lambda:*:*:function:signalwire-*"
+    },
+    {
+      "Sid": "APIGatewayPermissions",
+      "Effect": "Allow",
+      "Action": [
+        "apigatewayv2:CreateApi",
+        "apigatewayv2:DeleteApi",
+        "apigatewayv2:GetApi",
+        "apigatewayv2:GetApis",
+        "apigatewayv2:CreateIntegration",
+        "apigatewayv2:CreateRoute",
+        "apigatewayv2:CreateStage",
+        "apigatewayv2:GetIntegrations",
+        "apigatewayv2:GetRoutes",
+        "apigatewayv2:GetStages"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "IAMPermissions",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:GetRole",
+        "iam:AttachRolePolicy",
+        "iam:PassRole"
+      ],
+      "Resource": "arn:aws:iam::*:role/signalwire-*"
+    },
+    {
+      "Sid": "CloudWatchLogs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams",
+        "logs:GetLogEvents",
+        "logs:FilterLogEvents"
+      ],
+      "Resource": "arn:aws:logs:*:*:log-group:/aws/lambda/signalwire-*"
+    }
+  ]
+}
+```
+
+### Using AWS Managed Policies
+
+Alternatively, attach these managed policies to your IAM user:
+- `AWSLambda_FullAccess`
+- `AmazonAPIGatewayAdministrator`
+- `IAMFullAccess` (or a more restrictive custom policy)
+
+## Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SWML_BASIC_AUTH_USER` | Basic auth username | `admin` |
-| `SWML_BASIC_AUTH_PASSWORD` | Basic auth password | Random (generated at deploy) |
+| `SWML_BASIC_AUTH_USER` | Basic auth username | Auto-generated |
+| `SWML_BASIC_AUTH_PASSWORD` | Basic auth password | Auto-generated |
 
 ### Setting Credentials at Deploy Time
 
 ```bash
-# Set credentials before deployment
 SWML_BASIC_AUTH_USER=myuser SWML_BASIC_AUTH_PASSWORD=secretpass ./deploy.sh
 ```
 
@@ -114,50 +214,6 @@ swaig-test handler.py --exec say_hello --args '{"name": "Alice"}'
 | `get_platform_info` | Get Lambda runtime info | none |
 | `echo` | Echo back a message | `message` (required) |
 
-## AWS IAM Permissions
-
-The deploying user needs the following permissions:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "lambda:CreateFunction",
-        "lambda:UpdateFunctionCode",
-        "lambda:UpdateFunctionConfiguration",
-        "lambda:GetFunction",
-        "lambda:DeleteFunction",
-        "lambda:AddPermission",
-        "lambda:RemovePermission",
-        "lambda:InvokeFunction"
-      ],
-      "Resource": "arn:aws:lambda:*:*:function:signalwire-*"
-    },
-    {
-      "Effect": "Allow",
-      "Action": [
-        "apigateway:*",
-        "apigatewayv2:*"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Effect": "Allow",
-      "Action": [
-        "iam:CreateRole",
-        "iam:GetRole",
-        "iam:AttachRolePolicy",
-        "iam:PassRole"
-      ],
-      "Resource": "arn:aws:iam::*:role/signalwire-*"
-    }
-  ]
-}
-```
-
 ## Cleanup
 
 ```bash
@@ -199,11 +255,27 @@ aws lambda invoke \
 2. **401 Unauthorized**: Check your credentials match what's configured in Lambda environment variables.
 
 3. **Timeout errors**: Increase Lambda timeout (default: 30s)
+   ```bash
+   aws lambda update-function-configuration \
+       --function-name signalwire-hello-world \
+       --timeout 60
+   ```
 
 4. **Memory errors**: Increase memory allocation (default: 512MB)
+   ```bash
+   aws lambda update-function-configuration \
+       --function-name signalwire-hello-world \
+       --memory-size 1024
+   ```
 
 5. **Permission denied**: Check IAM role has correct policies
 
-6. **Cold starts**: First request may be slow; consider provisioned concurrency
+6. **Cold starts**: First request may be slow; consider provisioned concurrency:
+   ```bash
+   aws lambda put-provisioned-concurrency-config \
+       --function-name signalwire-hello-world \
+       --qualifier '$LATEST' \
+       --provisioned-concurrent-executions 1
+   ```
 
 7. **Upload timeout**: Large packages may timeout on slow connections. The script uses `--cli-read-timeout 300` to allow up to 5 minutes.

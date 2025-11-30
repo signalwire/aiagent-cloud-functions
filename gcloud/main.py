@@ -102,4 +102,10 @@ def main(request):
     Returns:
         Flask response
     """
-    return agent.run(request)
+    try:
+        return agent.run(request, force_mode='google_cloud_function')
+    except Exception as e:
+        import traceback
+        print(f"ERROR: {e}")
+        print(f"TRACEBACK: {traceback.format_exc()}")
+        raise

@@ -22,6 +22,9 @@ TIMEOUT="60s"
 MIN_INSTANCES=0
 MAX_INSTANCES=10
 
+# Directory containing this script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 echo "=== SignalWire Hello World - Google Cloud Functions Deployment ==="
 echo "Function: $FUNCTION_NAME"
 echo "Region: $REGION"
@@ -42,9 +45,26 @@ gcloud services enable cloudfunctions.googleapis.com --quiet
 gcloud services enable cloudbuild.googleapis.com --quiet
 gcloud services enable artifactregistry.googleapis.com --quiet
 
-# Step 2: Deploy function
+# Step 2: Create deployment package with embedded SDK
 echo ""
-echo "Step 2: Deploying Cloud Function..."
+echo "Step 2: Creating deployment package..."
+
+# Create a temporary deployment directory
+DEPLOY_DIR=$(mktemp -d)
+trap "rm -rf $DEPLOY_DIR" EXIT
+
+# Copy the main files
+cp "$SCRIPT_DIR/main.py" "$DEPLOY_DIR/"
+
+# Copy requirements.txt
+cp "$SCRIPT_DIR/requirements.txt" "$DEPLOY_DIR/"
+
+echo "Deployment package contents:"
+ls -la "$DEPLOY_DIR/"
+
+# Step 3: Deploy function
+echo ""
+echo "Step 3: Deploying Cloud Function..."
 
 # Check if function exists (Gen 2 vs Gen 1)
 EXISTING_GEN2=$(gcloud functions describe "$FUNCTION_NAME" --region="$REGION" --gen2 2>/dev/null && echo "yes" || echo "no")
@@ -55,7 +75,7 @@ if [ "$EXISTING_GEN2" == "yes" ]; then
         --gen2 \
         --region="$REGION" \
         --runtime="$RUNTIME" \
-        --source=. \
+        --source="$DEPLOY_DIR" \
         --entry-point="$ENTRY_POINT" \
         --trigger-http \
         --allow-unauthenticated \
@@ -70,7 +90,7 @@ else
         --gen2 \
         --region="$REGION" \
         --runtime="$RUNTIME" \
-        --source=. \
+        --source="$DEPLOY_DIR" \
         --entry-point="$ENTRY_POINT" \
         --trigger-http \
         --allow-unauthenticated \
@@ -81,9 +101,9 @@ else
         --quiet
 fi
 
-# Step 3: Get the endpoint URL
+# Step 4: Get the endpoint URL
 echo ""
-echo "Step 3: Getting endpoint URL..."
+echo "Step 4: Getting endpoint URL..."
 
 ENDPOINT=$(gcloud functions describe "$FUNCTION_NAME" \
     --region="$REGION" \
@@ -107,7 +127,7 @@ echo "Configure SignalWire:"
 echo "  Set your phone number's SWML URL to: $ENDPOINT"
 echo ""
 
-# Step 4: Optional - Set environment variables
+# Step 5: Optional - Set environment variables
 echo "To set environment variables (optional):"
 echo "  gcloud functions deploy $FUNCTION_NAME \\"
 echo "    --region=$REGION \\"

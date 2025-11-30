@@ -1,2 +1,2 @@
-signalwire-agents>=1.0.8
+signalwire-agents>=1.0.10
 functions-framework>=3.0.0
