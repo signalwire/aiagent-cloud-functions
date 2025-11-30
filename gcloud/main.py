@@ -60,17 +60,42 @@ class HelloWorldAgent(AgentBase):
 
         @self.tool(description="Get Google Cloud deployment information")
         def get_platform_info(args, raw_data):
+            import urllib.request
+
             # Gen 2 Cloud Functions run on Cloud Run with these env vars
             service = os.getenv("K_SERVICE", "unknown")
             revision = os.getenv("K_REVISION", "unknown")
-            project = os.getenv("GOOGLE_CLOUD_PROJECT", os.getenv("GCLOUD_PROJECT", "unknown"))
-            # Cloud Run sets memory limit in K8s format
-            memory_limit = os.getenv("MEMORY_LIMIT", "unknown")
+
+            # Query metadata server for project ID (Cloud Run doesn't set GOOGLE_CLOUD_PROJECT)
+            project = os.getenv("GOOGLE_CLOUD_PROJECT", "unknown")
+            if project == "unknown":
+                try:
+                    req = urllib.request.Request(
+                        "http://metadata.google.internal/computeMetadata/v1/project/project-id",
+                        headers={"Metadata-Flavor": "Google"}
+                    )
+                    with urllib.request.urlopen(req, timeout=2) as resp:
+                        project = resp.read().decode()
+                except Exception:
+                    pass
+
+            # Query metadata server for memory limit
+            memory = "unknown"
+            try:
+                req = urllib.request.Request(
+                    "http://metadata.google.internal/computeMetadata/v1/instance/attributes/MEMORY_LIMIT",
+                    headers={"Metadata-Flavor": "Google"}
+                )
+                with urllib.request.urlopen(req, timeout=2) as resp:
+                    memory = resp.read().decode()
+            except Exception:
+                # Memory not available via metadata, check env
+                memory = os.getenv("MEMORY_LIMIT", "512Mi")
 
             return SwaigFunctionResult(
                 f"Running on Google Cloud Functions Gen 2. "
                 f"Service: {service}, Revision: {revision}, "
-                f"Project: {project}, Memory: {memory_limit}."
+                f"Project: {project}, Memory: {memory}."
             )
 
         @self.tool(
@@ -104,10 +129,4 @@ def main(request):
     Returns:
         Flask response
     """
-    try:
-        return agent.run(request, force_mode='google_cloud_function')
-    except Exception as e:
-        import traceback
-        print(f"ERROR: {e}")
-        print(f"TRACEBACK: {traceback.format_exc()}")
-        raise
+    return agent.run(request)
