@@ -1,0 +1,1 @@
+signalwire-agents>=1.0.8
