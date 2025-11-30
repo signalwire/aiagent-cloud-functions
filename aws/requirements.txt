@@ -1,1 +1,5 @@
 signalwire-agents>=1.0.8
+h11>=0.13,<0.15
+fastapi
+mangum
+uvicorn

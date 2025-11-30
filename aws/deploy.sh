@@ -3,7 +3,7 @@
 #
 # Prerequisites:
 #   - AWS CLI configured with appropriate credentials
-#   - Python 3.11+ installed
+#   - Docker installed and running (for building Lambda-compatible packages)
 #
 # Usage:
 #   ./deploy.sh                    # Deploy with defaults
@@ -21,10 +21,26 @@ MEMORY_SIZE=512
 TIMEOUT=30
 ROLE_NAME="${FUNCTION_NAME}-role"
 
+# Default credentials (change these or set via environment)
+AUTH_USER="${SWML_BASIC_AUTH_USER:-admin}"
+AUTH_PASS="${SWML_BASIC_AUTH_PASSWORD:-$(openssl rand -base64 12)}"
+
 echo "=== SignalWire Hello World - AWS Lambda Deployment ==="
 echo "Function: $FUNCTION_NAME"
 echo "Region: $REGION"
 echo ""
+
+# Check for Docker
+if ! command -v docker &> /dev/null; then
+    echo "ERROR: Docker is required but not installed."
+    echo "Please install Docker: https://docs.docker.com/get-docker/"
+    exit 1
+fi
+
+if ! docker info &> /dev/null; then
+    echo "ERROR: Docker is not running. Please start Docker."
+    exit 1
+fi
 
 # Get AWS account ID
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
@@ -65,22 +81,27 @@ else
     echo "IAM role already exists: $ROLE_NAME"
 fi
 
-# Step 2: Package the function
+# Step 2: Package the function using Docker
 echo ""
-echo "Step 2: Packaging function..."
+echo "Step 2: Packaging function with Docker (linux/amd64)..."
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR=$(mktemp -d)
 PACKAGE_DIR="$BUILD_DIR/package"
 ZIP_FILE="$BUILD_DIR/function.zip"
 
 mkdir -p "$PACKAGE_DIR"
 
-# Install dependencies
-echo "Installing dependencies..."
-pip install -r requirements.txt -t "$PACKAGE_DIR" --quiet
-
-# Copy handler
-cp handler.py "$PACKAGE_DIR/"
+# Build dependencies using Lambda Python image for correct architecture
+echo "Installing dependencies via Docker..."
+docker run --rm \
+    --platform linux/amd64 \
+    --entrypoint "" \
+    -v "$SCRIPT_DIR:/var/task:ro" \
+    -v "$PACKAGE_DIR:/var/output" \
+    -w /var/task \
+    public.ecr.aws/lambda/python:3.11 \
+    bash -c "pip install -r requirements.txt -t /var/output --quiet && cp handler.py /var/output/"
 
 # Create zip
 echo "Creating deployment package..."
@@ -101,6 +122,7 @@ if aws lambda get-function --function-name "$FUNCTION_NAME" --region "$REGION" 2
         --function-name "$FUNCTION_NAME" \
         --zip-file "fileb://$ZIP_FILE" \
         --region "$REGION" \
+        --cli-read-timeout 300 \
         --output text --query 'FunctionArn'
 else
     echo "Creating new function..."
@@ -113,6 +135,8 @@ else
         --memory-size "$MEMORY_SIZE" \
         --timeout "$TIMEOUT" \
         --region "$REGION" \
+        --cli-read-timeout 300 \
+        --environment "Variables={SWML_BASIC_AUTH_USER=$AUTH_USER,SWML_BASIC_AUTH_PASSWORD=$AUTH_PASS}" \
         --output text --query 'FunctionArn'
 fi
 
@@ -244,14 +268,18 @@ echo "=== Deployment Complete ==="
 echo ""
 echo "Endpoint URL: $ENDPOINT"
 echo ""
+echo "Authentication:"
+echo "  Username: $AUTH_USER"
+echo "  Password: $AUTH_PASS"
+echo ""
 echo "Test SWML output:"
-echo "  curl $ENDPOINT/"
+echo "  curl -u $AUTH_USER:$AUTH_PASS $ENDPOINT/"
 echo ""
 echo "Test SWAIG function:"
-echo "  curl -X POST $ENDPOINT/swaig \\"
+echo "  curl -u $AUTH_USER:$AUTH_PASS -X POST $ENDPOINT/swaig \\"
 echo "    -H 'Content-Type: application/json' \\"
 echo "    -d '{\"function\": \"say_hello\", \"argument\": {\"parsed\": [{\"name\": \"Alice\"}]}}'"
 echo ""
 echo "Configure SignalWire:"
-echo "  Set your phone number's SWML URL to: $ENDPOINT/"
+echo "  Set your phone number's SWML URL to: https://$AUTH_USER:$AUTH_PASS@${API_ID}.execute-api.${REGION}.amazonaws.com/"
 echo ""
