@@ -136,13 +136,22 @@ else
         --timeout "$TIMEOUT" \
         --region "$REGION" \
         --cli-read-timeout 300 \
-        --environment "Variables={SWML_BASIC_AUTH_USER=$SWML_BASIC_AUTH_USER,SWML_BASIC_AUTH_PASSWORD=$SWML_BASIC_AUTH_PASSWORD}" \
         --output text --query 'FunctionArn'
 fi
 
 # Wait for function to be active
 echo "Waiting for function to be active..."
 aws lambda wait function-active --function-name "$FUNCTION_NAME" --region "$REGION"
+
+# Update environment variables (always, for both new and existing functions)
+echo "Configuring environment variables..."
+aws lambda update-function-configuration \
+    --function-name "$FUNCTION_NAME" \
+    --region "$REGION" \
+    --environment "Variables={SWML_BASIC_AUTH_USER=$SWML_BASIC_AUTH_USER,SWML_BASIC_AUTH_PASSWORD=$SWML_BASIC_AUTH_PASSWORD}" \
+    --output text --query 'FunctionArn' > /dev/null
+
+aws lambda wait function-updated --function-name "$FUNCTION_NAME" --region "$REGION"
 
 # Step 4: Create or get API Gateway
 echo ""
