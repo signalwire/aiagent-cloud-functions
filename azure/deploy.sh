@@ -21,6 +21,10 @@ RUNTIME="python"
 RUNTIME_VERSION="3.11"
 FUNCTIONS_VERSION="4"
 
+# Credentials (set via environment or auto-generate)
+AUTH_USER="${SWML_BASIC_AUTH_USER:-admin}"
+AUTH_PASSWORD="${SWML_BASIC_AUTH_PASSWORD:-$(openssl rand -base64 12)}"
+
 
 # Truncate storage account name to 24 chars (Azure limit)
 STORAGE_ACCOUNT="${STORAGE_ACCOUNT:0:24}"
@@ -155,24 +159,17 @@ echo "Deployment complete"
 # Cleanup
 rm -rf "$DEPLOY_DIR"
 
-# Step 7: Set environment variables (only if provided)
+# Step 7: Set environment variables
 echo ""
 echo "Step 7: Configuring environment variables..."
-if [ -n "$SWML_BASIC_AUTH_USER" ] && [ -n "$SWML_BASIC_AUTH_PASSWORD" ]; then
-    az functionapp config appsettings set \
-        --name "$APP_NAME" \
-        --resource-group "$RESOURCE_GROUP" \
-        --settings \
-            SWML_BASIC_AUTH_USER="$SWML_BASIC_AUTH_USER" \
-            SWML_BASIC_AUTH_PASSWORD="$SWML_BASIC_AUTH_PASSWORD" \
-        --output none
-    echo "Custom credentials configured"
-else
-    echo "No credentials provided - SDK will auto-generate secure credentials"
-    echo "Check function logs for generated credentials, or set your own:"
-    echo "  az functionapp config appsettings set --name $APP_NAME --resource-group $RESOURCE_GROUP \\"
-    echo "    --settings SWML_BASIC_AUTH_USER=myuser SWML_BASIC_AUTH_PASSWORD=mypass"
-fi
+az functionapp config appsettings set \
+    --name "$APP_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --settings \
+        SWML_BASIC_AUTH_USER="$AUTH_USER" \
+        SWML_BASIC_AUTH_PASSWORD="$AUTH_PASSWORD" \
+    --output none
+echo "Credentials configured"
 
 # Step 8: Get the endpoint URL
 echo ""
@@ -189,34 +186,18 @@ echo "=== Deployment Complete ==="
 echo ""
 echo "Endpoint URL: $ENDPOINT/api/function_app"
 echo ""
-if [ -n "$SWML_BASIC_AUTH_USER" ] && [ -n "$SWML_BASIC_AUTH_PASSWORD" ]; then
-    echo "Authentication:"
-    echo "  Username: $SWML_BASIC_AUTH_USER"
-    echo "  Password: $SWML_BASIC_AUTH_PASSWORD"
-    echo ""
-    echo "Test SWML output:"
-    echo "  curl -u $SWML_BASIC_AUTH_USER:$SWML_BASIC_AUTH_PASSWORD $ENDPOINT/api/function_app"
-    echo ""
-    echo "Test SWAIG function:"
-    echo "  curl -u $SWML_BASIC_AUTH_USER:$SWML_BASIC_AUTH_PASSWORD -X POST $ENDPOINT/api/function_app/swaig \\"
-    echo "    -H 'Content-Type: application/json' \\"
-    echo "    -d '{\"function\": \"say_hello\", \"argument\": {\"parsed\": [{\"name\": \"Alice\"}]}}'"
-    echo ""
-    echo "Configure SignalWire:"
-    echo "  Set your phone number's SWML URL to: https://$SWML_BASIC_AUTH_USER:$SWML_BASIC_AUTH_PASSWORD@${APP_NAME}.azurewebsites.net/api/function_app"
-else
-    echo "Authentication: SDK will auto-generate credentials"
-    echo "  Check function logs or set credentials manually (see Step 7 output above)"
-    echo ""
-    echo "Test SWML output (replace user:pass with your credentials):"
-    echo "  curl -u user:pass $ENDPOINT/api/function_app"
-    echo ""
-    echo "Test SWAIG function:"
-    echo "  curl -u user:pass -X POST $ENDPOINT/api/function_app/swaig \\"
-    echo "    -H 'Content-Type: application/json' \\"
-    echo "    -d '{\"function\": \"say_hello\", \"argument\": {\"parsed\": [{\"name\": \"Alice\"}]}}'"
-    echo ""
-    echo "Configure SignalWire:"
-    echo "  Set your phone number's SWML URL to: https://user:pass@${APP_NAME}.azurewebsites.net/api/function_app"
-fi
+echo "Authentication:"
+echo "  Username: $AUTH_USER"
+echo "  Password: $AUTH_PASSWORD"
+echo ""
+echo "Test SWML output:"
+echo "  curl -u $AUTH_USER:$AUTH_PASSWORD $ENDPOINT/api/function_app"
+echo ""
+echo "Test SWAIG function:"
+echo "  curl -u $AUTH_USER:$AUTH_PASSWORD -X POST $ENDPOINT/api/function_app/swaig \\"
+echo "    -H 'Content-Type: application/json' \\"
+echo "    -d '{\"function\": \"say_hello\", \"argument\": {\"parsed\": [{\"name\": \"Alice\"}]}}'"
+echo ""
+echo "Configure SignalWire:"
+echo "  Set your phone number's SWML URL to: https://$AUTH_USER:$AUTH_PASSWORD@${APP_NAME}.azurewebsites.net/api/function_app"
 echo ""

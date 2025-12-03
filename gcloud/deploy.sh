@@ -22,6 +22,10 @@ TIMEOUT="60s"
 MIN_INSTANCES=0
 MAX_INSTANCES=10
 
+# Credentials (set via environment or auto-generate)
+AUTH_USER="${SWML_BASIC_AUTH_USER:-admin}"
+AUTH_PASSWORD="${SWML_BASIC_AUTH_PASSWORD:-$(openssl rand -base64 12)}"
+
 # Directory containing this script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -83,6 +87,7 @@ if [ "$EXISTING_GEN2" == "yes" ]; then
         --timeout="$TIMEOUT" \
         --min-instances="$MIN_INSTANCES" \
         --max-instances="$MAX_INSTANCES" \
+        --set-env-vars="SWML_BASIC_AUTH_USER=$AUTH_USER,SWML_BASIC_AUTH_PASSWORD=$AUTH_PASSWORD" \
         --quiet
 else
     echo "Creating new Gen 2 function..."
@@ -98,6 +103,7 @@ else
         --timeout="$TIMEOUT" \
         --min-instances="$MIN_INSTANCES" \
         --max-instances="$MAX_INSTANCES" \
+        --set-env-vars="SWML_BASIC_AUTH_USER=$AUTH_USER,SWML_BASIC_AUTH_PASSWORD=$AUTH_PASSWORD" \
         --quiet
 fi
 
@@ -115,22 +121,18 @@ echo "=== Deployment Complete ==="
 echo ""
 echo "Endpoint URL: $ENDPOINT"
 echo ""
+echo "Authentication:"
+echo "  Username: $AUTH_USER"
+echo "  Password: $AUTH_PASSWORD"
+echo ""
 echo "Test SWML output:"
-echo "  curl $ENDPOINT"
+echo "  curl -u $AUTH_USER:$AUTH_PASSWORD $ENDPOINT"
 echo ""
 echo "Test SWAIG function:"
-echo "  curl -X POST $ENDPOINT/swaig \\"
+echo "  curl -u $AUTH_USER:$AUTH_PASSWORD -X POST $ENDPOINT/swaig \\"
 echo "    -H 'Content-Type: application/json' \\"
 echo "    -d '{\"function\": \"say_hello\", \"argument\": {\"parsed\": [{\"name\": \"Alice\"}]}}'"
 echo ""
 echo "Configure SignalWire:"
-echo "  Set your phone number's SWML URL to: $ENDPOINT"
-echo ""
-
-# Step 5: Optional - Set environment variables
-echo "To set environment variables (optional):"
-echo "  gcloud functions deploy $FUNCTION_NAME \\"
-echo "    --region=$REGION \\"
-echo "    --gen2 \\"
-echo "    --update-env-vars SWML_BASIC_AUTH_USER=myuser,SWML_BASIC_AUTH_PASSWORD=mypass"
+echo "  Set your phone number's SWML URL to: https://$AUTH_USER:$AUTH_PASSWORD@${ENDPOINT#https://}"
 echo ""
